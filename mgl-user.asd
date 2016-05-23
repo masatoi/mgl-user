@@ -11,7 +11,7 @@
   :version "0.1"
   :author ""
   :license ""
-  :depends-on (:mgl :mgl-example)
+  :depends-on (:mgl :mgl-example :fare-csv :parse-number)
   :components ((:module "src"
                 :components
                 ((:file "package")

@@ -32,6 +32,10 @@
 
 (in-package :mgl-user)
 
+;;; Setting for GPU
+(setf *default-mat-ctype* :float)
+(setf *cuda-enabled* t)
+
 ;;; Load training/test data
 (defparameter *mnist-data-dir* "/home/wiz/mgl/example/mnist-data/")
 (defparameter *mnist-save-dir* "/home/wiz/mgl/example/mnist-save/")
@@ -60,22 +64,12 @@
     (prediction (->softmax-xe-loss (->activation f3 :name 'prediction :size 10)
                                    :name 'prediction))))
 
-(defparameter fnn1
+(defparameter fnn2
   (build-fnn (:class 'fnn :max-n-stripes 100)
-    ;; Input Layer
-    (inputs (->input :size 784))
-    ;; Layer1 500units, ReLU
-    (f1-activations (->activation inputs :name 'f1 :size 500))
-    (f1 (->relu f1-activations)) ;  ->SIGMOID, ->DROPOUT, ->RELU, ->TANH, etc...
-    ;; Layer2 500 units, ReLU
-    (f2-activations (->activation f1 :name 'f2 :size 500))
-    (f2 (->relu f2-activations))
-    ;; Layer3 2000 units, ReLU
-    (f3-activations (->activation f2 :name 'f3 :size 2000))
-    (f3 (->relu f3-activations))
-    ;; Output Layer: softmax layer
-    (prediction (->softmax-xe-loss (->activation f3 :name 'prediction :size 10)
-                                   :name 'prediction))))
+    (inputs     (->input :size 784))                              ; 入力層: 入力次元数784
+    (f1         (->relu (->activation inputs :size 256)))         ; 隠れ層1: ユニット数256、活性化関数ReLU
+    (f2         (->relu (->activation f1     :size 256)))         ; 隠れ層2: ユニット数256、活性化関数ReLU
+    (prediction (->softmax-xe-loss (->activation f2 :size 10))))) ; 出力層: 出力次元数10、活性化関数はソフトマックス関数
 
 (defparameter fnn-sigmoid
   (build-fnn (:class 'fnn :max-n-stripes 100)
@@ -107,18 +101,18 @@
 
 (defparameter fnn2
   (build-fnn (:class 'fnn :max-n-stripes 100)
-    ;; Input Layer
+    ;; Input Layer 784 dim
     (inputs (->input :size 784))
-    ;; Layer1 500units, ReLU
+    ;; Hidden Layer 1 1200 units, ReLU
     (f1-activations (->activation inputs :name 'f1 :size 1200))
     (f1 (->relu f1-activations))
-    ;; Layer2 500 units, ReLU
+    ;; Hidden Layer 2 1200 units, ReLU
     (f2-activations (->activation f1 :name 'f2 :size 1200))
     (f2 (->relu f2-activations))
-    ;; Layer3 2000 units, ReLU
+    ;; Hidden Layer 3 1200 units, ReLU
     (f3-activations (->activation f2 :name 'f3 :size 1200))
     (f3 (->relu f3-activations))
-    ;; Output Layer: softmax layer
+    ;; Output Layer: Softmax layer 10 dim
     (prediction (->softmax-xe-loss (->activation f3 :name 'prediction :size 10)
                                    :name 'prediction))))
 
@@ -148,13 +142,13 @@
 (defparameter fnn-relu-dropout
   (build-fnn (:class 'fnn :max-n-stripes 100)
     (inputs (->input :size 784 :dropout 0.2))
-    (f1-activations (->activation inputs :name 'f1 :size 500))
+    (f1-activations (->activation inputs :name 'f1 :size 1200))
     (f1* (->relu f1-activations))
     (f1 (->dropout f1*))
-    (f2-activations (->activation f1 :name 'f2 :size 500))
+    (f2-activations (->activation f1 :name 'f2 :size 1200))
     (f2* (->relu f2-activations))
     (f2 (->dropout f2*))
-    (f3-activations (->activation f2 :name 'f3 :size 2000))
+    (f3-activations (->activation f2 :name 'f3 :size 1200))
     (f3* (->relu f3-activations))
     (f3 (->dropout f3*))
     (prediction (->softmax-xe-loss (->activation f3 :name 'prediction :size 10)
@@ -166,11 +160,30 @@
       (inputs (->input :size 784 :dropout 0.2))
       (f1-activations (->activation inputs :name 'f1 :size 1200))
       (f1* (->max f1-activations :group-size group-size))
-      (f1 (->dropout f1*))
+      (f1 (->dropout f1* :dropout 0.5))
       (f2-activations (->activation f1 :name 'f2 :size 1200))
       (f2* (->max f2-activations :group-size group-size))
-      (f2 (->dropout f2*))
-      (prediction (->softmax-xe-loss (->activation f2 :name 'prediction :size 10)
+      (f2 (->dropout f2* :dropout 0.5))
+      (f3-activations (->activation f2 :name 'f3 :size 1200))
+      (f3* (->max f3-activations :group-size group-size))
+      (f3 (->dropout f3* :dropout 0.5))
+      (prediction (->softmax-xe-loss (->activation f3 :name 'prediction :size 10)
+                                     :name 'prediction)))))
+
+(defparameter fnn-max-channel-dropout
+  (let ((group-size 5))
+    (build-fnn (:class 'fnn :max-n-stripes 100)
+      (inputs (->input :size 784 :dropout 0.2))
+      (f1-activations (->activation inputs :name 'f1 :size 1200))
+      (f1* (->max-channel f1-activations :group-size group-size))
+      (f1 (->dropout f1* :dropout 0.5))
+      (f2-activations (->activation f1 :name 'f2 :size 1200))
+      (f2* (->max-channel f2-activations :group-size group-size))
+      (f2 (->dropout f2* :dropout 0.5))
+      (f3-activations (->activation f2 :name 'f3 :size 1200))
+      (f3* (->max-channel f3-activations :group-size group-size))
+      (f3 (->dropout f3* :dropout 0.5))
+      (prediction (->softmax-xe-loss (->activation f3 :name 'prediction :size 10)
                                      :name 'prediction)))))
 
 ;; MGL-USER> (let ((*cuda-enabled* nil))
@@ -212,6 +225,8 @@
 (let ((*cuda-enabled* nil))
   (time (train-fnn-process fnn1 *training-data* :n-epochs 10)))
 
+(train-fnn-process-with-monitor fnn2 *training-data* *test-data* :n-epochs 2)
+
 (let ((*cuda-enabled* nil))
   (time (train-fnn-process-with-monitor
          fnn1
@@ -225,19 +240,23 @@
 
 ;;; DBN ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+
+(defclass constant-chunk-single-float (constant-chunk)
+  ((default-value :initform 1.0 :reader default-value)))
+
 ;;; Make DBN instance
 (defparameter dbn1
   (make-instance 'dbn
-     :layers (list (list (make-instance 'constant-chunk :name 'c0)
+     :layers (list (list (make-instance 'constant-chunk-single-float :name 'c0)
                          (make-instance 'sigmoid-chunk :name 'inputs
                                         :size (* 28 28)))
-                   (list (make-instance 'constant-chunk :name 'c1)
+                   (list (make-instance 'constant-chunk-single-float :name 'c1)
                          (make-instance 'sigmoid-chunk :name 'f1
                                         :size 500))
-                   (list (make-instance 'constant-chunk :name 'c2)
+                   (list (make-instance 'constant-chunk-single-float :name 'c2)
                          (make-instance 'sigmoid-chunk :name 'f2
                                         :size 500))
-                   (list (make-instance 'constant-chunk :name 'c3)
+                   (list (make-instance 'constant-chunk-single-float :name 'c3)
                          (make-instance 'sigmoid-chunk :name 'f3
                                         :size 2000)))
      :rbm-class 'rbm
@@ -323,3 +342,7 @@
      :rbm-class 'rbm
      :max-n-stripes 100 ; batch size
      ))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; FNN + regression
+

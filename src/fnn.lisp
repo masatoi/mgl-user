@@ -87,8 +87,127 @@
   (log-msg "End")
   fnn)
 
+(defun train-fnn-with-monitor-adam (fnn training test
+                               &key
+                                 (n-epochs 3000)
+                                 (learning-rate 0.1) (mean-decay 0.9) (mean-decay-decay 0.9)
+                                 (variance-decay 0.9))
+  (let ((optimizer (monitor-optimization-periodically
+                    (make-instance 'segmented-gd-optimizer-with-data
+                       :training training
+                       :test test
+                       :segmenter (constantly
+                                   (make-instance 'adam-optimizer
+                                      ;:learning-rate learning-rate
+                                      :mean-decay 0
+                                      ;:mean-decay-decay mean-decay-decay
+                                      ;:variance-decay variance-decay
+                                      :batch-size (max-n-stripes fnn))))
+                    '((:fn log-bpn-test-error :period log-test-period)
+                      (:fn reset-optimization-monitors
+                       :period log-training-period
+                       :last-eval 0))))
+        (learner (make-instance 'bp-learner :bpn fnn))
+        (dateset (make-sampler training :n-epochs n-epochs)))
+    (minimize optimizer learner :dataset dateset)
+    fnn))
+
+(defun train-fnn-process-with-monitor-adam (fnn training test
+                          &key (n-epochs 30) (learning-rate 0.1)
+                            (mean-decay 0.9) (mean-decay-decay 0.9) (variance-decay 0.9))
+  (with-cuda* ()
+    (repeatably ()
+      (init-bpn-weights fnn :stddev 0.01)
+      (train-fnn-with-monitor-adam fnn training test
+                                   :n-epochs n-epochs
+                                   :learning-rate learning-rate
+                                   :mean-decay mean-decay
+                                   :mean-decay-decay mean-decay-decay
+                                   :variance-decay variance-decay)))
+  (log-msg "End")
+  fnn)
+
 (defun test-fnn (fnn test)
   (monitor-bpn-results (make-sampler test :max-n (length test))
                        fnn
                        (make-datum-label-monitors fnn)))
 
+(defmethod set-input (samples (bpn fnn))
+  (let* ((inputs (or (find-clump (chunk-lump-name 'inputs nil) bpn :errorp nil)
+                     (find-clump 'inputs bpn)))
+         (prediction (find-clump 'prediction bpn)))
+    (clamp-data samples (nodes inputs))
+    (setf (target prediction) (label-target-list samples))))
+
+(defun predict-datum (fnn datum)
+  (let* ((a (datum-array datum))
+         (len (mat-dimension a 0))
+         (input-nodes (nodes (find-clump 'inputs fnn)))
+         (output-nodes (nodes (find-clump 'prediction fnn))))
+    ;; set input
+    (loop for i from 0 to (1- len) do
+      (setf (mref input-nodes 0 i) (mref a i)))
+    ;; run
+    (forward fnn)
+    ;; return output
+    (reshape output-nodes (mat-dimension output-nodes 1))))
+
+
+(defclass mnist-bpn-gd-segment-optimizer (sgd-optimizer)
+  ((n-instances-in-epoch
+    :initarg :n-instances-in-epoch
+    :reader n-instances-in-epoch)
+   (n-epochs-to-reach-final-momentum
+    :initarg :n-epochs-to-reach-final-momentum
+    :reader n-epochs-to-reach-final-momentum)
+   (learning-rate-decay
+    :initform 0.998
+    :initarg :learning-rate-decay
+    :accessor learning-rate-decay)))
+
+(defmethod learning-rate ((optimizer mnist-bpn-gd-segment-optimizer))
+  (* (expt (learning-rate-decay optimizer)
+           (/ (n-instances optimizer)
+              (n-instances-in-epoch optimizer)))
+     (- 1 (momentum optimizer))
+     (slot-value optimizer 'learning-rate)))
+
+(defmethod momentum ((optimizer mnist-bpn-gd-segment-optimizer))
+  (let ((n-epochs-to-reach-final (n-epochs-to-reach-final-momentum optimizer))
+        (initial 0.5)
+        (final 0.99)
+        (epoch (/ (n-instances optimizer) (n-instances-in-epoch optimizer))))
+    (if (< epoch n-epochs-to-reach-final)
+        (let ((weight (/ epoch n-epochs-to-reach-final)))
+          (+ (* initial (- 1 weight))
+             (* final weight)))
+        final)))
+
+(defun train-fnn-decay-learning-rate (fnn training test &key (n-epochs 30))
+  (let ((optimizer (monitor-optimization-periodically
+                    (make-instance 'segmented-gd-optimizer-with-data
+                       :training training
+                       :test test
+                       :segmenter (constantly
+                                   (make-instance 'mnist-bpn-gd-segment-optimizer
+                                      :n-instances-in-epoch (length training)
+                                      :n-epochs-to-reach-final-momentum (min 500 (/ n-epochs 2))
+                                      :learning-rate 1
+                                      :learning-rate-decay 0.998
+                                      :batch-size (max-n-stripes fnn)))
+                       '((:fn log-bpn-test-error :period log-test-period)
+                         (:fn reset-optimization-monitors
+                          :period log-training-period
+                          :last-eval 0)))))
+          (learner (make-instance 'bp-learner :bpn fnn))
+          (dateset (make-sampler training :n-epochs n-epochs)))
+        (minimize optimizer learner :dataset dateset)
+        fnn))
+  
+(defun train-fnn-process-decay-learning-rate (fnn training test &key (n-epochs 30))
+  (with-cuda* ()
+    (repeatably ()
+      (init-bpn-weights fnn :stddev 0.01)
+      (train-fnn-decay-learning-rate fnn training test :n-epochs n-epochs)))
+  (log-msg "End")
+  fnn)
