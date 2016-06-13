@@ -220,12 +220,11 @@
 
 ;; by GPU
 (train-fnn-process fnn1 *training-data* :n-epochs 10)
+(train-fnn-process-with-monitor fnn2 *training-data* *test-data* :n-epochs 2)
 
 ;; by CPU
 (let ((*cuda-enabled* nil))
   (time (train-fnn-process fnn1 *training-data* :n-epochs 10)))
-
-(train-fnn-process-with-monitor fnn2 *training-data* *test-data* :n-epochs 2)
 
 (let ((*cuda-enabled* nil))
   (time (train-fnn-process-with-monitor

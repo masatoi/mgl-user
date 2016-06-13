@@ -100,13 +100,14 @@
       (setf (datum-array new-datum) (copy-mat (datum-array datum))))
     new-dataset))
 
-(defun dataset-normalization (dataset &key test-dataset (noise-degree 1.0))
+(defun dataset-normalize! (dataset &key test-dataset (noise-degree 1.0))
   (let* ((first-datum (datum-array (aref dataset 0)))
          (datum-dim (mat-dimension first-datum 0))
          (average (dataset-average dataset))
          (variance (dataset-variance dataset average))
          (noise (make-mat datum-dim :initial-element noise-degree)))
     (axpy! 1.0 noise variance)
+    (.sqrt! variance)
     (.inv! variance)
     (loop for datum across dataset do
       (axpy! -1.0 average (datum-array datum))
