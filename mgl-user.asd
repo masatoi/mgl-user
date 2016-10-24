@@ -19,7 +19,8 @@
                  (:file "load-mnist" :depends-on ("package"))
                  (:file "logging" :depends-on ("package" "datum"))
                  (:file "dbn" :depends-on ("package" "datum" "load-mnist" "logging"))
-                 (:file "fnn" :depends-on ("package" "datum" "load-mnist" "logging")))))
+                 (:file "fnn" :depends-on ("package" "datum" "load-mnist" "logging"))
+                 (:file "regression" :depends-on ("fnn" "package" "datum" "load-mnist" "logging")))))
   :description ""
   :long-description
   #.(with-open-file (stream (merge-pathnames
