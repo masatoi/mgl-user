@@ -90,18 +90,18 @@
 (defun train-fnn-with-monitor-adam (fnn training test
                                &key
                                  (n-epochs 3000)
-                                 (learning-rate 0.1) (mean-decay 0.9) (mean-decay-decay 0.9)
-                                 (variance-decay 0.9))
+                                 (learning-rate 2.e-4) (mean-decay 0.9) (mean-decay-decay (- 1 1.d-7))
+                                 (variance-decay 0.999))
   (let ((optimizer (monitor-optimization-periodically
                     (make-instance 'segmented-gd-optimizer-with-data
                        :training training
                        :test test
                        :segmenter (constantly
                                    (make-instance 'adam-optimizer
-                                      ;:learning-rate learning-rate
-                                      :mean-decay 0
-                                      ;:mean-decay-decay mean-decay-decay
-                                      ;:variance-decay variance-decay
+                                      :learning-rate learning-rate
+                                      :mean-decay mean-decay
+                                      :mean-decay-decay mean-decay-decay
+                                      :variance-decay variance-decay
                                       :batch-size (max-n-stripes fnn))))
                     '((:fn log-bpn-test-error :period log-test-period)
                       (:fn reset-optimization-monitors
