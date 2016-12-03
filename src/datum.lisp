@@ -30,10 +30,6 @@
   (assert (= (length samples) (mat-dimension mat 0)))
   (map-concat #'copy! samples mat :key #'sample-datum-array))
 
-(defun clamp-data (samples mat)
-  (assert (= (length samples) (mat-dimension mat 0)))
-  (map-concat #'copy! samples mat :key #'sample-datum-array))
-
 ;; for clamp-chunk-labels of DBN/DBM
 (defun clamp-labels (samples mat)
   (assert (= (length samples) (mat-dimension mat 0)))
