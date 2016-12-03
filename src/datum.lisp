@@ -46,7 +46,7 @@
                  (unless discard-label-p
                    (setf (aref a (+ displacement
                                     (* row n-columns)
-                                    (image-label image)))
+                                    (datum-label image)))
                          one)))))))
 
 ;;; Grobal Contrast Normalization
